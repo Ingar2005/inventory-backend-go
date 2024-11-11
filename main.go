@@ -13,7 +13,7 @@ import (
 type Supplier struct {
 	supplierID          int64
 	supplier_name       string
-	supplier_contact_no string
+	supplier_contact_no string // IF NULLL WILL BE VALUE N/A
 	lead_time           int64
 	monday_deliver      bool
 	tuesday_deliver     bool
@@ -26,6 +26,15 @@ type Supplier struct {
 type room struct {
 	roomId   int
 	roomName string
+}
+type stock struct {
+	stockID       int
+	itemName      string
+	level         float64
+	roomID        int
+	supplierID    int
+	incidentLevel float64
+	lastLogID     int // IF NONE WILL BE VALUE 0
 }
 
 const (
@@ -58,6 +67,21 @@ const (
 
 	genericRoom = `
 	INSERT IGNORE INTO rooms(roomID,roomName) VALUES (1,'generic');
+	`
+
+	createStock = `
+	CREATE TABLE IF NOT EXISTS stock(
+		stockID int NOT NULL AUTO_INCREMENT,
+		itemName varchar(255) NOT NULL,
+		level float NOT NULL,
+		roomID int NOT NULL,
+		supplierID int NOT NULL,
+		incidentLevel float,
+		lastLogID int,
+
+		PRIMARY KEY (stockID),
+		FOREIGN KEY (roomID) REFERENCES rooms(roomID),
+		FOREIGN KEY (supplierID) REFERENCES suppliers(supplierID));
 	`
 )
 
@@ -129,6 +153,11 @@ func initialiseTables(db *sql.DB) (err error) {
 		return (err)
 	}
 
+	_, err = db.Exec(createStock)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 func printSuppliers(db *sql.DB) (err error) {
@@ -173,6 +202,27 @@ func printRooms(db *sql.DB) (err error) {
 			return err
 		}
 
+		fmt.Println(data)
+	}
+	return nil
+}
+func printStock(db *sql.DB) (err error) {
+
+	rows, err := db.Query("SELECT * FROM SRTOCK")
+	if err != nil {
+		return err
+	}
+
+	for rows.Next() {
+		data := stock{}
+		var log sql.NullInt64
+		rows.Scan(&data.stockID, &data.itemName, &data.level, &data.roomID, &data.supplierID, &data.incidentLevel, &log)
+
+		if log.Valid {
+			data.lastLogID = int(log.Int64)
+		} else {
+			data.lastLogID = 0
+		}
 		fmt.Println(data)
 	}
 	return nil
