@@ -36,6 +36,14 @@ type stock struct {
 	incidentLevel float64
 	lastLogID     int // IF NONE WILL BE VALUE 0
 }
+type logRow struct {
+	logID        int
+	stockID      int
+	differance   float64
+	totalAfter   float64
+	incidentTime float64
+	daily        bool
+}
 
 const (
 	createSuppliers = `
@@ -64,7 +72,6 @@ const (
 	roomName varchar(255) NOT NULL,
 	primary key(roomID));
 	`
-
 	genericRoom = `
 	INSERT IGNORE INTO rooms(roomID,roomName) VALUES (1,'generic');
 	`
@@ -82,6 +89,18 @@ const (
 		PRIMARY KEY (stockID),
 		FOREIGN KEY (roomID) REFERENCES rooms(roomID),
 		FOREIGN KEY (supplierID) REFERENCES suppliers(supplierID));
+	`
+
+	createLogs = `
+	CREATE TABLE IF NOT EXISTS logs (
+    logID int NOT NULL AUTO_INCREMENT,
+    stockID int NOT NULL,
+    differance float NOT NULL,
+    totalAfter float NOT NULL,
+    incidentTime datetime NOT NULL,
+    daily boolean NOT NULL,
+    PRIMARY KEY (logID),
+    FOREIGN KEY (stockID) REFERENCES stock(stockID));
 	`
 )
 
@@ -101,12 +120,13 @@ func main() {
 	}
 	defer db.Close()
 
-	// CREATE TABLES AND INSERT GENERIC VALUES
 	err = initialiseTables(db)
 
 	//PRINT TABLES
 	printSuppliers(db)
 	printRooms(db)
+	printStock(db)
+	printLogs(db)
 }
 func connection(db_user string, db_pass string, db_name string, db_endpoint string) (*sql.DB, error) {
 	var dsn string = fmt.Sprintf("%s:%s@tcp(%s)/%s", db_user, db_pass, db_endpoint, db_name)
@@ -154,6 +174,11 @@ func initialiseTables(db *sql.DB) (err error) {
 	}
 
 	_, err = db.Exec(createStock)
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec(createLogs)
 	if err != nil {
 		return err
 	}
@@ -223,6 +248,21 @@ func printStock(db *sql.DB) (err error) {
 		} else {
 			data.lastLogID = 0
 		}
+		fmt.Println(data)
+	}
+	return nil
+}
+func printLogs(db *sql.DB) (err error) {
+
+	rows, err := db.Query("SELECT * FROM logs")
+	if err != nil {
+		return err
+	}
+
+	var data logRow
+
+	for rows.Next() {
+		rows.Scan(&data.logID, &data.stockID, &data.differance, &data.totalAfter, &data.incidentTime, &data.daily)
 		fmt.Println(data)
 	}
 	return nil
