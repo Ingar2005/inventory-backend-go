@@ -6,11 +6,12 @@ import (
 	"log"
 	"os"
 
+	"github.com/go-sql-driver/mysql"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/joho/godotenv"
 )
 
-type Supplier struct {
+type supplier struct {
 	supplierID          int64
 	supplier_name       string
 	supplier_contact_no string // IF NULLL WILL BE VALUE N/A
@@ -41,7 +42,7 @@ type logRow struct {
 	stockID      int
 	differance   float64
 	totalAfter   float64
-	incidentTime float64
+	incidentTime mysql.NullTime
 	daily        bool
 }
 
@@ -119,14 +120,35 @@ func main() {
 		log.Fatal(err)
 	}
 	defer db.Close()
-
+	// _, err = db.Exec("DROP TABLE IF EXISTS logs, stock, rooms, suppliers;")
 	err = initialiseTables(db)
 
 	//PRINT TABLES
-	printSuppliers(db)
-	printRooms(db)
-	printStock(db)
-	printLogs(db)
+	err = printSuppliers(db)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = printRooms(db)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = printStock(db)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = printLogs(db)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// TEST VALUES
+	// _, err = db.Exec("INSERT INTO stock(itemName, level, roomID, supplierID, incidentLevel) VALUES (?, ?, ?, ?, ?)", "test", 10, 1, 1, 0)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// _, err = db.Exec("INSERT INTO logs(stockID, differance, totalAfter, incidentTime, daily) VALUES (?, ?, ?, NOW(), ?)", 1, -1, 9, 0)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
 }
 func connection(db_user string, db_pass string, db_name string, db_endpoint string) (*sql.DB, error) {
 	var dsn string = fmt.Sprintf("%s:%s@tcp(%s)/%s", db_user, db_pass, db_endpoint, db_name)
@@ -192,9 +214,11 @@ func printSuppliers(db *sql.DB) (err error) {
 	}
 	defer row.Close()
 
+	fmt.Println("Suppliers: ")
+
+	var data supplier
+	var contactNo sql.NullString
 	for row.Next() {
-		var contactNo sql.NullString
-		data := Supplier{}
 
 		err := row.Scan(&data.supplierID, &data.supplier_name, &contactNo, &data.lead_time,
 			&data.monday_deliver, &data.tuesday_deliver, &data.wednesday_deliver, &data.thursday_deliver,
@@ -220,8 +244,9 @@ func printRooms(db *sql.DB) (err error) {
 	}
 	defer rows.Close()
 
+	fmt.Println("Rooms: ")
+	var data room
 	for rows.Next() {
-		var data room = room{}
 		err = rows.Scan(&data.roomId, &data.roomName)
 		if err != nil {
 			return err
@@ -233,13 +258,15 @@ func printRooms(db *sql.DB) (err error) {
 }
 func printStock(db *sql.DB) (err error) {
 
-	rows, err := db.Query("SELECT * FROM SRTOCK")
+	rows, err := db.Query("SELECT * FROM stock")
 	if err != nil {
 		return err
 	}
+	defer rows.Close()
 
+	var data stock
+	fmt.Println("stock:")
 	for rows.Next() {
-		data := stock{}
 		var log sql.NullInt64
 		rows.Scan(&data.stockID, &data.itemName, &data.level, &data.roomID, &data.supplierID, &data.incidentLevel, &log)
 
@@ -258,12 +285,21 @@ func printLogs(db *sql.DB) (err error) {
 	if err != nil {
 		return err
 	}
+	defer rows.Close()
+
+	fmt.Println("Logs: ")
 
 	var data logRow
-
 	for rows.Next() {
-		rows.Scan(&data.logID, &data.stockID, &data.differance, &data.totalAfter, &data.incidentTime, &data.daily)
-		fmt.Println(data)
+		err = rows.Scan(&data.logID, &data.stockID, &data.differance, &data.totalAfter, &data.incidentTime, &data.daily)
+		if err != nil {
+			return err
+		}
+		if data.incidentTime.Valid {
+			fmt.Printf("%v: %v \n", data.incidentTime.Time.Format("02-01-2006 15:04:05"), data)
+		} else {
+			fmt.Println("N/A")
+		}
 	}
 	return nil
 }
