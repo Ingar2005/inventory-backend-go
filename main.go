@@ -132,14 +132,17 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	err = printStock(db)
+	res, err := getStock(db)
 	if err != nil {
 		log.Fatal(err)
 	}
+	fmt.Println(res)
+
 	err = printLogs(db)
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	// TEST VALUES
 	// _, err = db.Exec("INSERT INTO stock(itemName, level, roomID, supplierID, incidentLevel) VALUES (?, ?, ?, ?, ?)", "test", 10, 1, 1, 0)
 	// if err != nil {
@@ -236,36 +239,32 @@ func printSuppliers(db *sql.DB) (err error) {
 	}
 	return nil
 }
-func printRooms(db *sql.DB) (err error) {
+func getRooms(db *sql.DB) (res []room, err error) {
 
 	rows, err := db.Query("SELECT * FROM rooms")
 	if err != nil {
-		return err
+		return res, err
 	}
 	defer rows.Close()
 
-	fmt.Println("Rooms: ")
 	var data room
 	for rows.Next() {
 		err = rows.Scan(&data.roomId, &data.roomName)
 		if err != nil {
-			return err
+			return res, err
 		}
 
-		fmt.Println(data)
 	}
-	return nil
+	return res, nil
 }
-func printStock(db *sql.DB) (err error) {
-
+func getStock(db *sql.DB) (res []stock, err error) {
 	rows, err := db.Query("SELECT * FROM stock")
 	if err != nil {
-		return err
+		return res, err
 	}
 	defer rows.Close()
 
 	var data stock
-	fmt.Println("stock:")
 	for rows.Next() {
 		var log sql.NullInt64
 		rows.Scan(&data.stockID, &data.itemName, &data.level, &data.roomID, &data.supplierID, &data.incidentLevel, &log)
@@ -275,31 +274,26 @@ func printStock(db *sql.DB) (err error) {
 		} else {
 			data.lastLogID = 0
 		}
-		fmt.Println(data)
+		res = append(res, data)
 	}
-	return nil
+	return res, nil
 }
-func printLogs(db *sql.DB) (err error) {
+func getLogs(db *sql.DB) (res []logRow, err error) {
 
 	rows, err := db.Query("SELECT * FROM logs")
 	if err != nil {
-		return err
+		return res, err
 	}
 	defer rows.Close()
-
-	fmt.Println("Logs: ")
 
 	var data logRow
 	for rows.Next() {
 		err = rows.Scan(&data.logID, &data.stockID, &data.differance, &data.totalAfter, &data.incidentTime, &data.daily)
 		if err != nil {
-			return err
+			return res, err
 		}
-		if data.incidentTime.Valid {
-			fmt.Printf("%v: %v \n", data.incidentTime.Time.Format("02-01-2006 15:04:05"), data)
-		} else {
-			fmt.Println("N/A")
-		}
+
+		res = append(res, data)
 	}
-	return nil
+	return res, nil
 }
