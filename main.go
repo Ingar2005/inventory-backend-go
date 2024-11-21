@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 
 	"github.com/go-sql-driver/mysql"
@@ -68,7 +69,7 @@ const (
 		VALUES (1, 'generic', 0, 1, 1, 1, 1, 1, 1, 1);
 		`
 	createRooms = `
-	CREATE TABLE rooms(
+	CREATE TABLE IF NOT EXISTS rooms(
 	roomID int NOT NULL AUTO_INCREMENT,
 	roomName varchar(255) NOT NULL,
 	primary key(roomID));
@@ -113,7 +114,7 @@ func main() {
 	db_pass := os.Getenv("DB_PASSWORD")
 	db_name := os.Getenv("DB_NAME")
 	db_endpoint := os.Getenv("DB_ENDPOINT")
-
+	port := ":5000"
 	// CRETE A CONNECTION
 	db, err := connection(db_user, db_pass, db_name, db_endpoint)
 	if err != nil {
@@ -122,37 +123,21 @@ func main() {
 	defer db.Close()
 	// _, err = db.Exec("DROP TABLE IF EXISTS logs, stock, rooms, suppliers;")
 	err = initialiseTables(db)
-
-	//PRINT TABLES
-	err = printSuppliers(db)
-	if err != nil {
-		log.Fatal(err)
-	}
-	err = printRooms(db)
-	if err != nil {
-		log.Fatal(err)
-	}
-	res, err := getStock(db)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(res)
-
-	err = printLogs(db)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// TEST VALUES
-	// _, err = db.Exec("INSERT INTO stock(itemName, level, roomID, supplierID, incidentLevel) VALUES (?, ?, ?, ?, ?)", "test", 10, 1, 1, 0)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// _, err = db.Exec("INSERT INTO logs(stockID, differance, totalAfter, incidentTime, daily) VALUES (?, ?, ?, NOW(), ?)", 1, -1, 9, 0)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
+	// CREATE server
+	http.HandleFunc("/", root)
+
+	fmt.Printf("attempting to connect on port%v", port)
+	log.Fatal(http.ListenAndServe(port, nil))
 }
+func root(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "Welcome to the HomePage!")
+	fmt.Println("Endpoint Hit: homePage")
+}
+
 func connection(db_user string, db_pass string, db_name string, db_endpoint string) (*sql.DB, error) {
 	var dsn string = fmt.Sprintf("%s:%s@tcp(%s)/%s", db_user, db_pass, db_endpoint, db_name)
 	db, err := sql.Open("mysql", dsn)
@@ -210,14 +195,12 @@ func initialiseTables(db *sql.DB) (err error) {
 
 	return nil
 }
-func printSuppliers(db *sql.DB) (err error) {
+func getSuppliers(db *sql.DB) (res []supplier, err error) {
 	row, err := db.Query("SELECT * FROM suppliers")
 	if err != nil {
-		return err
+		return res, err
 	}
 	defer row.Close()
-
-	fmt.Println("Suppliers: ")
 
 	var data supplier
 	var contactNo sql.NullString
@@ -227,7 +210,7 @@ func printSuppliers(db *sql.DB) (err error) {
 			&data.monday_deliver, &data.tuesday_deliver, &data.wednesday_deliver, &data.thursday_deliver,
 			&data.friday_deliver, &data.saturday_deliver, &data.sunday_deliver)
 		if err != nil {
-			return err
+			return res, err
 		}
 
 		if contactNo.Valid {
@@ -235,9 +218,9 @@ func printSuppliers(db *sql.DB) (err error) {
 		} else {
 			data.supplier_contact_no = "N/A"
 		}
-		fmt.Println(data)
+		res = append(res, data)
 	}
-	return nil
+	return res, nil
 }
 func getRooms(db *sql.DB) (res []room, err error) {
 
