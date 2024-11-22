@@ -2,6 +2,8 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
+	_ "encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -12,39 +14,39 @@ import (
 	"github.com/joho/godotenv"
 )
 
-type supplier struct {
-	supplierID          int64
-	supplier_name       string
-	supplier_contact_no string // IF NULLL WILL BE VALUE N/A
-	lead_time           int64
-	monday_deliver      bool
-	tuesday_deliver     bool
-	wednesday_deliver   bool
-	thursday_deliver    bool
-	friday_deliver      bool
-	saturday_deliver    bool
-	sunday_deliver      bool
+type Supplier struct {
+	SupplierID        int64  `json:supplierID`
+	SupplierName      string `json:supplierName`
+	SupplierContactNo string `json:supplierContactNo` // IF NULLL WILL BE VALUE N/A
+	LeadTime          int64  `json:leadTime`
+	MondayDeliver     bool   `json:mondayDeliver`
+	TuesdayDeliver    bool   `json:tuesdayDeliver`
+	WednesdayDeliver  bool   `json:wednesdayDeliver`
+	ThursdayDeliver   bool   `json:thursdayDeliver`
+	FridayDeliver     bool   `json:fridayDeliver`
+	SaturdayDeliver   bool   `json:saturdayDeliver`
+	SundayDeliver     bool   `json:sundayDeliver`
 }
-type room struct {
-	roomId   int
-	roomName string
+type Room struct {
+	RoomId   int    `json:roomId`
+	RoomName string `json:roomName`
 }
-type stock struct {
-	stockID       int
-	itemName      string
-	level         float64
-	roomID        int
-	supplierID    int
-	incidentLevel float64
-	lastLogID     int // IF NONE WILL BE VALUE 0
+type Stock struct {
+	StockID       int     `json:stockID`
+	ItemName      string  `json:itemName`
+	Level         float64 `json:level`
+	RoomID        int     `json:roomID`
+	SupplierID    int     `json:supplierID`
+	IncidentLevel float64 `json:incidentLevel`
+	LastLogID     int     `json:lastLogID` // IF NONE WILL BE VALUE 0
 }
-type logRow struct {
-	logID        int
-	stockID      int
-	differance   float64
-	totalAfter   float64
-	incidentTime mysql.NullTime
-	daily        bool
+type LogRow struct {
+	LogID        int            `json:logID`
+	StockID      int            `json:stockID`
+	Differance   float64        `json:differance`
+	TotalAfter   float64        `json:totalAfter`
+	IncidentTime mysql.NullTime `json:incidentTime`
+	Daily        bool           `json:daily`
 }
 
 const (
@@ -106,6 +108,8 @@ const (
 	`
 )
 
+var db *sql.DB
+
 func main() {
 	var err error
 
@@ -116,28 +120,45 @@ func main() {
 	db_endpoint := os.Getenv("DB_ENDPOINT")
 	port := ":5000"
 	// CRETE A CONNECTION
-	db, err := connection(db_user, db_pass, db_name, db_endpoint)
+	db, err = connection(db_user, db_pass, db_name, db_endpoint)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer db.Close()
 	// _, err = db.Exec("DROP TABLE IF EXISTS logs, stock, rooms, suppliers;")
-	err = initialiseTables(db)
+	err = initialiseTables()
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// CREATE server
 	http.HandleFunc("/", root)
-
-	fmt.Printf("attempting to connect on port%v", port)
+	http.HandleFunc("/logs", logs)
+	http.HandleFunc("/suppliers", suppliers)
+	fmt.Printf("attempting to connect on port%v \n", port)
 	log.Fatal(http.ListenAndServe(port, nil))
+	fmt.Println("hi")
 }
 func root(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Welcome to the HomePage!")
 	fmt.Println("Endpoint Hit: homePage")
 }
+func logs(w http.ResponseWriter, r *http.Request) {
+	res, err := getLogs()
+	if err != nil {
+		log.Fatal(err)
+	}
 
+	json.NewEncoder(w).Encode(res)
+}
+func suppliers(w http.ResponseWriter, r *http.Request) {
+	res, err := getSuppliers()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	json.NewEncoder(w).Encode(res)
+}
 func connection(db_user string, db_pass string, db_name string, db_endpoint string) (*sql.DB, error) {
 	var dsn string = fmt.Sprintf("%s:%s@tcp(%s)/%s", db_user, db_pass, db_endpoint, db_name)
 	db, err := sql.Open("mysql", dsn)
@@ -161,7 +182,7 @@ func connection(db_user string, db_pass string, db_name string, db_endpoint stri
 
 	return db, nil
 }
-func initialiseTables(db *sql.DB) (err error) {
+func initialiseTables() (err error) {
 
 	_, err = db.Exec(createSuppliers)
 	if err != nil {
@@ -195,34 +216,34 @@ func initialiseTables(db *sql.DB) (err error) {
 
 	return nil
 }
-func getSuppliers(db *sql.DB) (res []supplier, err error) {
+func getSuppliers() (res []Supplier, err error) {
 	row, err := db.Query("SELECT * FROM suppliers")
 	if err != nil {
 		return res, err
 	}
 	defer row.Close()
 
-	var data supplier
+	var data Supplier
 	var contactNo sql.NullString
 	for row.Next() {
 
-		err := row.Scan(&data.supplierID, &data.supplier_name, &contactNo, &data.lead_time,
-			&data.monday_deliver, &data.tuesday_deliver, &data.wednesday_deliver, &data.thursday_deliver,
-			&data.friday_deliver, &data.saturday_deliver, &data.sunday_deliver)
+		err := row.Scan(&data.SupplierID, &data.SupplierName, &contactNo, &data.LeadTime,
+			&data.MondayDeliver, &data.TuesdayDeliver, &data.WednesdayDeliver, &data.ThursdayDeliver, &data.FridayDeliver, &data.SaturdayDeliver, &data.SundayDeliver)
 		if err != nil {
 			return res, err
 		}
 
 		if contactNo.Valid {
-			data.supplier_contact_no = contactNo.String
+			data.SupplierContactNo = contactNo.String
 		} else {
-			data.supplier_contact_no = "N/A"
+			data.SupplierContactNo = "N/A"
 		}
 		res = append(res, data)
 	}
+	fmt.Println(res)
 	return res, nil
 }
-func getRooms(db *sql.DB) (res []room, err error) {
+func getRooms() (res []Room, err error) {
 
 	rows, err := db.Query("SELECT * FROM rooms")
 	if err != nil {
@@ -230,9 +251,9 @@ func getRooms(db *sql.DB) (res []room, err error) {
 	}
 	defer rows.Close()
 
-	var data room
+	var data Room
 	for rows.Next() {
-		err = rows.Scan(&data.roomId, &data.roomName)
+		err = rows.Scan(&data.RoomId, &data.RoomName)
 		if err != nil {
 			return res, err
 		}
@@ -240,28 +261,28 @@ func getRooms(db *sql.DB) (res []room, err error) {
 	}
 	return res, nil
 }
-func getStock(db *sql.DB) (res []stock, err error) {
+func getStock() (res []Stock, err error) {
 	rows, err := db.Query("SELECT * FROM stock")
 	if err != nil {
 		return res, err
 	}
 	defer rows.Close()
 
-	var data stock
+	var data Stock
 	for rows.Next() {
 		var log sql.NullInt64
-		rows.Scan(&data.stockID, &data.itemName, &data.level, &data.roomID, &data.supplierID, &data.incidentLevel, &log)
+		rows.Scan(&data.StockID, &data.ItemName, &data.Level, &data.RoomID, &data.SupplierID, &data.IncidentLevel, &log)
 
 		if log.Valid {
-			data.lastLogID = int(log.Int64)
+			data.LastLogID = int(log.Int64)
 		} else {
-			data.lastLogID = 0
+			data.LastLogID = 0
 		}
 		res = append(res, data)
 	}
 	return res, nil
 }
-func getLogs(db *sql.DB) (res []logRow, err error) {
+func getLogs() (res []LogRow, err error) {
 
 	rows, err := db.Query("SELECT * FROM logs")
 	if err != nil {
@@ -269,9 +290,9 @@ func getLogs(db *sql.DB) (res []logRow, err error) {
 	}
 	defer rows.Close()
 
-	var data logRow
+	var data LogRow
 	for rows.Next() {
-		err = rows.Scan(&data.logID, &data.stockID, &data.differance, &data.totalAfter, &data.incidentTime, &data.daily)
+		err = rows.Scan(&data.LogID, &data.StockID, &data.Differance, &data.TotalAfter, &data.IncidentTime, &data.Daily)
 		if err != nil {
 			return res, err
 		}
