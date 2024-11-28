@@ -8,6 +8,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/go-sql-driver/mysql"
 	_ "github.com/go-sql-driver/mysql"
@@ -47,6 +49,16 @@ type LogRow struct {
 	TotalAfter   float64        `json:totalAfter`
 	IncidentTime mysql.NullTime `json:incidentTime`
 	Daily        bool           `json:daily`
+}
+type FullStock struct {
+	StockID       int            `json:stockID`
+	ItemName      string         `json:itemName`
+	Level         float64        `json:level`
+	Room          string         `json:room`
+	Supplier      string         `json:supplier`
+	IncidentLevel float64        `json:incidentLevel`
+	LastLogID     int            `json:lastLogID`
+	LastChanged   mysql.NullTime `json:lastChange`
 }
 
 const (
@@ -130,21 +142,25 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	// CREATE server
+	http.HandleFunc("/logs/", logs)
+	http.HandleFunc("/suppliers/", suppliers)
+	http.HandleFunc("/rooms/", rooms)
+	http.HandleFunc("/stock/", stock)
+	http.HandleFunc("/fullStock/", stockFull)
 	http.HandleFunc("/", root)
-	http.HandleFunc("/logs", logs)
-	http.HandleFunc("/suppliers", suppliers)
 	fmt.Printf("attempting to connect on port%v \n", port)
 	log.Fatal(http.ListenAndServe(port, nil))
-	fmt.Println("hi")
 }
 func root(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Welcome to the HomePage!")
-	fmt.Println("Endpoint Hit: homePage")
+	fmt.Println("Endpoint Hit: root")
 }
 func logs(w http.ResponseWriter, r *http.Request) {
-	res, err := getLogs()
+	var res []LogRow
+	var err error
+
+	fmt.Println("Endpoint Hit: logs")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -152,9 +168,55 @@ func logs(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(res)
 }
 func suppliers(w http.ResponseWriter, r *http.Request) {
+
+	fmt.Println("Endpoint Hit: suppliers")
 	res, err := getSuppliers()
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	json.NewEncoder(w).Encode(res)
+}
+func rooms(w http.ResponseWriter, r *http.Request) {
+
+	fmt.Println("Endpoint Hit: rooms")
+	res, err := getRooms()
+	fmt.Println(res)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	json.NewEncoder(w).Encode(res)
+}
+func stock(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Endpoint Hit: stock")
+
+	res, err := getStock()
+
+	if err != nil {
+		log.Fatal(err)
+	}
+	json.NewEncoder(w).Encode(res)
+}
+func stockFull(w http.ResponseWriter, r *http.Request) {
+	var res []FullStock
+	var err error
+
+	fmt.Println("Endpoint Hit: stock_full")
+
+	id := strings.TrimPrefix(r.URL.Path, "/fullStock/")
+	idnum, err := strconv.Atoi(id)
+
+	if id != "" && err == nil {
+		res, err = getFullStockById(idnum)
+		if err != nil {
+			log.Fatal(err)
+		}
+	} else {
+		res, err = getStockFull()
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	json.NewEncoder(w).Encode(res)
@@ -257,7 +319,7 @@ func getRooms() (res []Room, err error) {
 		if err != nil {
 			return res, err
 		}
-
+		res = append(res, data)
 	}
 	return res, nil
 }
@@ -278,9 +340,53 @@ func getStock() (res []Stock, err error) {
 		} else {
 			data.LastLogID = 0
 		}
+
 		res = append(res, data)
 	}
 	return res, nil
+}
+func getStockFull() (res []FullStock, err error) {
+	rows, err := db.Query(`
+		SELECT
+		    stock.stockID,
+		    stock.itemName,
+		    stock.level,
+		    rooms.roomName AS room,
+		    suppliers.supplierName AS supplier,
+		    stock.incidentLevel,
+		    stock.lastLogID,
+		    logs.incidentTime AS "last changed"
+		FROM
+		    stock
+		JOIN
+		    rooms ON stock.roomID = rooms.roomID
+		JOIN
+		    suppliers ON stock.supplierID = suppliers.supplierID
+		LEFT JOIN
+		    logs ON stock.lastLogID = logs.logID;`)
+
+	defer rows.Close()
+	if err != nil {
+		return res, err
+	}
+
+	var data FullStock
+	var log sql.NullInt64
+	for rows.Next() {
+		err = rows.Scan(&data.StockID, &data.ItemName, &data.Level, &data.Room, &data.Supplier, &data.IncidentLevel, &log, &data.LastChanged)
+		if err != nil {
+			return res, err
+		}
+		if log.Valid {
+			data.LastLogID = int(log.Int64)
+
+		} else {
+			data.LastLogID = 0
+		}
+		res = append(res, data)
+	}
+
+	return res, err
 }
 func getLogs() (res []LogRow, err error) {
 
@@ -297,6 +403,49 @@ func getLogs() (res []LogRow, err error) {
 			return res, err
 		}
 
+		res = append(res, data)
+	}
+	return res, nil
+}
+func getFullStockById(id int) (res []FullStock, err error) {
+	row, err := db.Query(`
+		SELECT
+		    stock.stockID,
+		    stock.itemName,
+		    stock.level,
+		    rooms.roomName AS room,
+		    suppliers.supplierName AS supplier,
+		    stock.incidentLevel,
+		    stock.lastLogID,
+		    logs.incidentTime AS "last changed"
+		FROM
+		    stock
+		JOIN
+		    rooms ON stock.roomID = rooms.roomID
+		JOIN
+		    suppliers ON stock.supplierID = suppliers.supplierID
+		LEFT JOIN
+		    logs ON stock.lastLogID = logs.logID
+		WHERE
+		    stock.stockID = ?;
+		`, id)
+	defer row.Close()
+
+	if err != nil {
+		return res, err
+	}
+	var data FullStock
+	var log sql.NullInt64
+	if row.Next() {
+		err = row.Scan(&data.StockID, &data.ItemName, &data.Level, &data.Room, &data.Supplier, &data.IncidentLevel, &log, &data.LastChanged)
+		if err != nil {
+			return res, err
+		}
+		if log.Valid {
+			data.LastLogID = int(log.Int64)
+		} else {
+			data.LastLogID = 0
+		}
 		res = append(res, data)
 	}
 	return res, nil
