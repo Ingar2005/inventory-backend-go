@@ -148,78 +148,111 @@ func main() {
 	http.HandleFunc("/rooms/", rooms)
 	http.HandleFunc("/stock/", stock)
 	http.HandleFunc("/fullStock/", stockFull)
+
 	http.HandleFunc("/", root)
 	fmt.Printf("attempting to connect on port%v \n", port)
 	log.Fatal(http.ListenAndServe(port, nil))
 }
 func root(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Welcome to the HomePage!")
-	fmt.Println("Endpoint Hit: root")
+
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+	} else {
+
+		fmt.Fprintf(w, "Welcome to the HomePage!")
+		fmt.Println("Endpoint Hit: root")
+	}
 }
 func logs(w http.ResponseWriter, r *http.Request) {
-	var res []LogRow
-	var err error
-
-	fmt.Println("Endpoint Hit: logs")
-	if err != nil {
-		log.Fatal(err)
+	switch r.Method {
+	case http.MethodGet:
+		var res []LogRow
+		var err error
+		fmt.Println("Endpoint Hit: logs GET")
+		res, err = getLogs()
+		if err != nil {
+			log.Fatal(err)
+		}
+		json.NewEncoder(w).Encode(res)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
-
-	json.NewEncoder(w).Encode(res)
 }
 func suppliers(w http.ResponseWriter, r *http.Request) {
 
-	fmt.Println("Endpoint Hit: suppliers")
-	res, err := getSuppliers()
-	if err != nil {
-		log.Fatal(err)
+	switch r.Method {
+	case http.MethodGet:
+		fmt.Println("Endpoint Hit: suppliers GET")
+		res, err := getSuppliers()
+		if err != nil {
+			log.Fatal(err)
+		}
+		json.NewEncoder(w).Encode(res)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 
-	json.NewEncoder(w).Encode(res)
 }
 func rooms(w http.ResponseWriter, r *http.Request) {
 
-	fmt.Println("Endpoint Hit: rooms")
-	res, err := getRooms()
-	fmt.Println(res)
-	if err != nil {
-		log.Fatal(err)
+	switch r.Method {
+	case http.MethodGet:
+		fmt.Println("Endpoint Hit: rooms GET")
+		res, err := getRooms()
+		fmt.Println(res)
+		if err != nil {
+			log.Fatal(err)
+		}
+		json.NewEncoder(w).Encode(res)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 
-	json.NewEncoder(w).Encode(res)
 }
 func stock(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Endpoint Hit: stock")
 
-	res, err := getStock()
+	switch r.Method {
+	case http.MethodGet:
+		fmt.Println("Endpoint Hit: stock GET")
 
-	if err != nil {
-		log.Fatal(err)
+		res, err := getStock()
+
+		if err != nil {
+			log.Fatal(err)
+		}
+		json.NewEncoder(w).Encode(res)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+
 	}
-	json.NewEncoder(w).Encode(res)
 }
 func stockFull(w http.ResponseWriter, r *http.Request) {
-	var res []FullStock
-	var err error
+	switch r.Method {
+	case http.MethodGet:
+		var res []FullStock
+		var err error
 
-	fmt.Println("Endpoint Hit: stock_full")
+		fmt.Println("Endpoint Hit: stock_full")
 
-	id := strings.TrimPrefix(r.URL.Path, "/fullStock/")
-	idnum, err := strconv.Atoi(id)
+		id := strings.TrimPrefix(r.URL.Path, "/fullStock/")
+		idnum, err := strconv.Atoi(id)
 
-	if id != "" && err == nil {
-		res, err = getFullStockById(idnum)
-		if err != nil {
-			log.Fatal(err)
+		if id != "" && err == nil {
+			res, err = getFullStockById(idnum)
+			if err != nil {
+				log.Fatal(err)
+			}
+		} else {
+			res, err = getStockFull()
+			if err != nil {
+				log.Fatal(err)
+			}
 		}
-	} else {
-		res, err = getStockFull()
-		if err != nil {
-			log.Fatal(err)
-		}
+		json.NewEncoder(w).Encode(res)
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
-
-	json.NewEncoder(w).Encode(res)
 }
 func connection(db_user string, db_pass string, db_name string, db_endpoint string) (*sql.DB, error) {
 	var dsn string = fmt.Sprintf("%s:%s@tcp(%s)/%s", db_user, db_pass, db_endpoint, db_name)
