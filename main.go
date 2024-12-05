@@ -54,7 +54,9 @@ type FullStock struct {
 	StockID       int            `json:stockID`
 	ItemName      string         `json:itemName`
 	Level         float64        `json:level`
+	RoomID        int            `json:roomID`
 	Room          string         `json:room`
+	SupplierID    int            `json:supplierID`
 	Supplier      string         `json:supplier`
 	IncidentLevel float64        `json:incidentLevel`
 	LastLogID     int            `json:lastLogID`
@@ -221,6 +223,13 @@ func stock(w http.ResponseWriter, r *http.Request) {
 			log.Fatal(err)
 		}
 		json.NewEncoder(w).Encode(res)
+	case http.MethodPost:
+		fmt.Println("Endpoint Hit: stock POST")
+		err := r.ParseForm()
+		if err != nil {
+			log.Fatal(err)
+		}
+
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 
@@ -232,7 +241,7 @@ func stockFull(w http.ResponseWriter, r *http.Request) {
 		var res []FullStock
 		var err error
 
-		fmt.Println("Endpoint Hit: stock_full")
+		fmt.Println("Endpoint Hit: stock_full GET")
 
 		id := strings.TrimPrefix(r.URL.Path, "/fullStock/")
 		idnum, err := strconv.Atoi(id)
@@ -248,6 +257,7 @@ func stockFull(w http.ResponseWriter, r *http.Request) {
 				log.Fatal(err)
 			}
 		}
+		fmt.Println(res)
 		json.NewEncoder(w).Encode(res)
 
 	default:
@@ -335,7 +345,6 @@ func getSuppliers() (res []Supplier, err error) {
 		}
 		res = append(res, data)
 	}
-	fmt.Println(res)
 	return res, nil
 }
 func getRooms() (res []Room, err error) {
@@ -384,7 +393,9 @@ func getStockFull() (res []FullStock, err error) {
 		    stock.stockID,
 		    stock.itemName,
 		    stock.level,
+			rooms.roomID,
 		    rooms.roomName AS room,
+			suppliers.supplierID,
 		    suppliers.supplierName AS supplier,
 		    stock.incidentLevel,
 		    stock.lastLogID,
@@ -406,7 +417,7 @@ func getStockFull() (res []FullStock, err error) {
 	var data FullStock
 	var log sql.NullInt64
 	for rows.Next() {
-		err = rows.Scan(&data.StockID, &data.ItemName, &data.Level, &data.Room, &data.Supplier, &data.IncidentLevel, &log, &data.LastChanged)
+		err = rows.Scan(&data.StockID, &data.ItemName, &data.Level, &data.RoomID, &data.Room, &data.SupplierID, &data.Supplier, &data.IncidentLevel, &log, &data.LastChanged)
 		if err != nil {
 			return res, err
 		}
@@ -430,12 +441,12 @@ func getLogs() (res []LogRow, err error) {
 	defer rows.Close()
 
 	var data LogRow
+
 	for rows.Next() {
 		err = rows.Scan(&data.LogID, &data.StockID, &data.Differance, &data.TotalAfter, &data.IncidentTime, &data.Daily)
 		if err != nil {
 			return res, err
 		}
-
 		res = append(res, data)
 	}
 	return res, nil
@@ -446,7 +457,9 @@ func getFullStockById(id int) (res []FullStock, err error) {
 		    stock.stockID,
 		    stock.itemName,
 		    stock.level,
+			rooms.roomID,
 		    rooms.roomName AS room,
+			suppliers.supplierID,
 		    suppliers.supplierName AS supplier,
 		    stock.incidentLevel,
 		    stock.lastLogID,
@@ -470,7 +483,7 @@ func getFullStockById(id int) (res []FullStock, err error) {
 	var data FullStock
 	var log sql.NullInt64
 	if row.Next() {
-		err = row.Scan(&data.StockID, &data.ItemName, &data.Level, &data.Room, &data.Supplier, &data.IncidentLevel, &log, &data.LastChanged)
+		err = row.Scan(&data.StockID, &data.ItemName, &data.Level, &data.RoomID, &data.Room, &data.SupplierID, &data.Supplier, &data.IncidentLevel, &log, &data.LastChanged)
 		if err != nil {
 			return res, err
 		}
