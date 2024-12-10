@@ -236,7 +236,14 @@ func stock(w http.ResponseWriter, r *http.Request) {
 	}
 }
 func stockFull(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
 	switch r.Method {
+	case http.MethodOptions:
+		w.WriteHeader(http.StatusOK)
+
 	case http.MethodGet:
 		var res []FullStock
 		var err error
@@ -257,8 +264,21 @@ func stockFull(w http.ResponseWriter, r *http.Request) {
 				log.Fatal(err)
 			}
 		}
-		fmt.Println(res)
 		json.NewEncoder(w).Encode(res)
+	case http.MethodPatch:
+
+		fmt.Println("Endpoint Hit: stock PATCH")
+		logCreate := `INSERT INTO logs(stockID,differance,totalAfter,incidentTime,daily) VALUES ?,?,?,NOW(),0;SELECT * FROM logs ORDER BY incidentTime DESC LIMIT 1;`
+		updateQuery := `UPDATE stock SET level=? WHERE stockID=?;`
+		var data FullStock
+		err := json.NewDecoder(r.Body).Decode(&data)
+		if err != nil {
+			log.Fatal(err)
+		}
+		stockId := data.StockID
+
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("User data received successfully"))
 
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
