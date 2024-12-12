@@ -268,15 +268,15 @@ func stockFull(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPatch:
 
 		fmt.Println("Endpoint Hit: stock PATCH")
-		logCreate := `INSERT INTO logs(stockID,differance,totalAfter,incidentTime,daily) VALUES ?,?,?,NOW(),0;SELECT * FROM logs ORDER BY incidentTime DESC LIMIT 1;`
-		updateQuery := `UPDATE stock SET level=? WHERE stockID=?;`
 		var data FullStock
 		err := json.NewDecoder(r.Body).Decode(&data)
 		if err != nil {
 			log.Fatal(err)
 		}
-		stockId := data.StockID
-
+		err = updateFullStockLevel(data)
+		if err != nil {
+			log.Fatal(err)
+		}
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("User data received successfully"))
 
@@ -284,6 +284,7 @@ func stockFull(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
+
 func connection(db_user string, db_pass string, db_name string, db_endpoint string) (*sql.DB, error) {
 	var dsn string = fmt.Sprintf("%s:%s@tcp(%s)/%s", db_user, db_pass, db_endpoint, db_name)
 	db, err := sql.Open("mysql", dsn)
@@ -341,6 +342,9 @@ func initialiseTables() (err error) {
 
 	return nil
 }
+
+// GET
+
 func getSuppliers() (res []Supplier, err error) {
 	row, err := db.Query("SELECT * FROM suppliers")
 	if err != nil {
@@ -515,4 +519,50 @@ func getFullStockById(id int) (res []FullStock, err error) {
 		res = append(res, data)
 	}
 	return res, nil
+}
+
+// UPDATE
+
+func updateFullStockLevel(data FullStock) (err error) {
+	const selectOldLevel = `SELECT level FROM stock WHERE stockID=? LIMIT 1 FOR UPDATE`
+	const insertLog = `INSERT INTO logs(stockID,differance,totalAfter,incidentTime,daily) VALUES (?,?,?,NOW(),0);`
+	const selectLog = `SELECT LAST_INSERT_ID();`
+	const updateQuery = `UPDATE stock SET level=?, lastLogID=? WHERE stockID=?;`
+
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stockId := data.StockID
+	var oldlevel float64
+	err = tx.QueryRow(selectOldLevel, stockId).Scan(&oldlevel)
+	if err != nil {
+		return err
+	}
+	stockLevel := data.Level
+	differance := stockLevel - oldlevel
+
+	_, err = tx.Exec(insertLog, stockId, differance, stockLevel)
+	if err != nil {
+		return err
+	}
+
+	var logID int
+	err = tx.QueryRow(selectLog).Scan(&logID)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(updateQuery, stockLevel, logID, stockId)
+	if err != nil {
+		return err
+	}
+
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+
+	return nil
 }
