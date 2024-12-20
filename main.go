@@ -212,8 +212,13 @@ func rooms(w http.ResponseWriter, r *http.Request) {
 
 }
 func stock(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, DELETE, PATCH, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
 	switch r.Method {
+	case http.MethodOptions:
+		w.WriteHeader(http.StatusOK)
 	case http.MethodGet:
 		fmt.Println("Endpoint Hit: stock GET")
 
@@ -223,13 +228,18 @@ func stock(w http.ResponseWriter, r *http.Request) {
 			log.Fatal(err)
 		}
 		json.NewEncoder(w).Encode(res)
-	case http.MethodPost:
-		fmt.Println("Endpoint Hit: stock POST")
-		err := r.ParseForm()
+	case http.MethodDelete:
+		fmt.Println("Endpoint Hit: stock DELETE")
+
+		id := strings.TrimPrefix(r.URL.Path, "/stock/")
+		idnum, err := strconv.Atoi(id)
 		if err != nil {
 			log.Fatal(err)
 		}
+		err = deleteStock(idnum)
 
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("data deleated sucesfuly"))
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 
@@ -278,7 +288,7 @@ func stockFull(w http.ResponseWriter, r *http.Request) {
 			log.Fatal(err)
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("User data received successfully"))
+		w.Write([]byte("data received successfully"))
 
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -564,5 +574,12 @@ func updateFullStockLevel(data FullStock) (err error) {
 		return err
 	}
 
+	return nil
+}
+
+// DELETE
+
+func deleteStock(id int) (err error) {
+	fmt.Println(id)
 	return nil
 }
