@@ -144,6 +144,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	// err = addStock("cheese", 3, 2, 1, 4)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
 	// CREATE server
 	http.HandleFunc("/logs/", logs)
 	http.HandleFunc("/suppliers/", suppliers)
@@ -196,16 +200,53 @@ func suppliers(w http.ResponseWriter, r *http.Request) {
 
 }
 func rooms(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, DELETE, PATCH, OPTIONS, POST")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
 	switch r.Method {
+	case http.MethodOptions:
+		fmt.Println("Endpoint Hit: rooms OPTIONS")
+		w.WriteHeader(http.StatusOK)
+
 	case http.MethodGet:
 		fmt.Println("Endpoint Hit: rooms GET")
 		res, err := getRooms()
-		fmt.Println(res)
 		if err != nil {
 			log.Fatal(err)
 		}
 		json.NewEncoder(w).Encode(res)
+	case http.MethodDelete:
+		fmt.Println("Endpoint Hit: rooms DELETE")
+
+		id := strings.TrimPrefix(r.URL.Path, "/rooms/")
+		idnum, err := strconv.Atoi(id)
+		if err != nil {
+			log.Fatal(err)
+		}
+		err = deleteRoom(idnum)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("data deleated sucesfuly"))
+
+	case http.MethodPost:
+		fmt.Println("Endpoint Hit: rooms POST")
+		var data Room
+		data.RoomId = 0
+		err := json.NewDecoder(r.Body).Decode(&data)
+		if err != nil {
+			log.Fatal(err)
+		}
+		err = addRoom(data.RoomName)
+		if err != nil {
+			log.Fatal(err)
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("data written sucesfuly"))
+
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -218,6 +259,7 @@ func stock(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodOptions:
+		fmt.Println("Endpoint Hit: stock OPTIONS")
 		w.WriteHeader(http.StatusOK)
 	case http.MethodGet:
 		fmt.Println("Endpoint Hit: stock GET")
@@ -237,9 +279,29 @@ func stock(w http.ResponseWriter, r *http.Request) {
 			log.Fatal(err)
 		}
 		err = deleteStock(idnum)
+		if err != nil {
+			log.Fatal(err)
+		}
 
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("data deleated sucesfuly"))
+	case http.MethodPost:
+		fmt.Println("Endpoint Hit: stock POST")
+		var data Stock
+		data.SupplierID = 1
+		data.LastLogID = 0
+		err := json.NewDecoder(r.Body).Decode(&data)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(data)
+		err = addStock(data.ItemName, data.Level, data.RoomID, data.SupplierID, data.IncidentLevel)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("data added sucesfuly"))
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 
@@ -252,6 +314,7 @@ func stockFull(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodOptions:
+		fmt.Println("Endpoint Hit: stock_full OPTIONS")
 		w.WriteHeader(http.StatusOK)
 
 	case http.MethodGet:
@@ -350,6 +413,28 @@ func initialiseTables() (err error) {
 		return err
 	}
 
+	return nil
+}
+
+// CREATE
+
+func addStock(name string, level float64, roomID int, supplierID int, incident float64) (err error) {
+	query := "INSERT INTO stock(itemName,level,roomID,supplierID,incidentLevel) VALUES (?,?,?,?,?)"
+
+	_, err = db.Exec(query, name, level, roomID, supplierID, incident)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+func addRoom(roomName string) (err error) {
+	query := "INSERT INTO rooms(roomName) VALUES (?)"
+
+	_, err = db.Exec(query, roomName)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -580,6 +665,32 @@ func updateFullStockLevel(data FullStock) (err error) {
 // DELETE
 
 func deleteStock(id int) (err error) {
-	fmt.Println(id)
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec("DELETE FROM logs WHERE stockID=?", id)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec("DELETE FROM stock WHERE stockID=?", id)
+	if err != nil {
+		return err
+	}
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+
+	return nil
+
+}
+func deleteRoom(id int) (err error) {
+	_, err = db.Exec("DELETE FROM rooms WHERE roomID=?", id)
+	if err != nil {
+		return err
+	}
 	return nil
 }
