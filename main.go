@@ -240,6 +240,7 @@ func rooms(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Fatal(err)
 		}
+		fmt.Println(data)
 		err = addRoom(data.RoomName)
 		if err != nil {
 			log.Fatal(err)
