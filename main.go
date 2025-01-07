@@ -235,7 +235,6 @@ func rooms(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		fmt.Println("Endpoint Hit: rooms POST")
 		var data Room
-		data.RoomId = 0
 		err := json.NewDecoder(r.Body).Decode(&data)
 		if err != nil {
 			log.Fatal(err)
@@ -248,6 +247,26 @@ func rooms(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("data written sucesfuly"))
 
+	case http.MethodPatch:
+		fmt.Println(("Endpoint Hit: rooms PATCH"))
+		var data Room
+		id := strings.TrimPrefix(r.URL.Path, "/rooms/")
+		idnum, err := strconv.Atoi(id)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		err = json.NewDecoder(r.Body).Decode(&data)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		err = updateRoom(idnum, data.RoomName)
+		if err != nil {
+			log.Fatal(err)
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("data updated sucesfully"))
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -303,6 +322,29 @@ func stock(w http.ResponseWriter, r *http.Request) {
 
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("data added sucesfuly"))
+	case http.MethodPatch:
+		fmt.Println("Endpoint Hit: stock PATCH")
+
+		id := strings.TrimPrefix(r.URL.Path, "/stock/")
+		idnum, err := strconv.Atoi(id)
+		if err != nil {
+			log.Fatal(err)
+		}
+		var data Stock
+
+		data.StockID = idnum
+		data.LastLogID = 0
+
+		err = json.NewDecoder(r.Body).Decode(&data)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		updateStock(data)
+
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("data updated sucesfuly"))
+
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 
@@ -657,6 +699,77 @@ func updateFullStockLevel(data FullStock) (err error) {
 	}
 
 	if err = tx.Commit(); err != nil {
+		return err
+	}
+
+	return nil
+}
+func updateRoom(id int, name string) (err error) {
+	query := ("UPDATE rooms SET roomName=? WHERE roomID=? ")
+
+	_, err = db.Exec(query, name, id)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+func updateStock(data Stock) (err error) {
+	const selectOldLevel = `SELECT level FROM stock WHERE stockID=? LIMIT 1 FOR UPDATE`
+	const insertLog = `INSERT INTO logs(stockID,differance,totalAfter,incidentTime,daily) VALUES (?,?,?,NOW(),0);`
+	const selectLog = `SELECT LAST_INSERT_ID();`
+	const updateQuery = `UPDATE stock SET level=?, lastLogID=? WHERE stockID=?;`
+
+	// CHECK IF LEVEL HAS CHANGED
+	query := "SELECT level FROM stock WHERE stockID=?"
+	var old_level float64
+	err = db.QueryRow(query, data.StockID).Scan(&old_level)
+	if err != nil {
+		return err
+	}
+	if old_level != data.Level {
+
+		tx, err := db.Begin()
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+
+		stockId := data.StockID
+		var oldlevel float64
+		err = tx.QueryRow(selectOldLevel, stockId).Scan(&oldlevel)
+		if err != nil {
+			return err
+		}
+		stockLevel := data.Level
+		differance := stockLevel - oldlevel
+
+		_, err = tx.Exec(insertLog, stockId, differance, stockLevel)
+		if err != nil {
+			return err
+		}
+
+		var logID int
+		err = tx.QueryRow(selectLog).Scan(&logID)
+		if err != nil {
+			return err
+		}
+
+		_, err = tx.Exec(updateQuery, stockLevel, logID, stockId)
+		if err != nil {
+			return err
+		}
+
+		if err = tx.Commit(); err != nil {
+			return err
+		}
+
+	}
+
+	// set everything else
+	query = "UPDATE stock SET itemName=?, roomID=?, supplierID=?, incidentLevel=? WHERE stockID=?"
+	_, err = db.Exec(query, data.ItemName, data.RoomID, data.SupplierID, data.IncidentLevel, data.StockID)
+	if err != nil {
 		return err
 	}
 
