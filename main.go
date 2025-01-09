@@ -224,11 +224,15 @@ func rooms(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Fatal(err)
 		}
+		if idnum == 1 {
+			http.Error(w, "Cannot delete this value", http.StatusBadRequest)
+			return
+		}
+
 		err = deleteRoom(idnum)
 		if err != nil {
 			log.Fatal(err)
 		}
-
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("data deleated sucesfuly"))
 
@@ -260,7 +264,10 @@ func rooms(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Fatal(err)
 		}
-
+		if idnum == 1 {
+			http.Error(w, "Cannot change this value", http.StatusBadRequest)
+			return
+		}
 		err = updateRoom(idnum, data.RoomName)
 		if err != nil {
 			log.Fatal(err)
@@ -570,11 +577,10 @@ func getStockFull() (res []FullStock, err error) {
 		    suppliers ON stock.supplierID = suppliers.supplierID
 		LEFT JOIN
 		    logs ON stock.lastLogID = logs.logID;`)
-
-	defer rows.Close()
 	if err != nil {
 		return res, err
 	}
+	defer rows.Close()
 
 	var data FullStock
 	var log sql.NullInt64
@@ -637,6 +643,9 @@ func getFullStockById(id int) (res []FullStock, err error) {
 		WHERE
 		    stock.stockID = ?;
 		`, id)
+	if err != nil {
+		return res, err
+	}
 	defer row.Close()
 
 	if err != nil {
@@ -802,9 +811,27 @@ func deleteStock(id int) (err error) {
 
 }
 func deleteRoom(id int) (err error) {
-	_, err = db.Exec("DELETE FROM rooms WHERE roomID=?", id)
+	// OI YOU MAKE SURE WE CHANGE ALL THE ROOMS OF EXISTING STOCK
+
+	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec("UPDATE stock SET roomID=1 WHERE roomID=?", id)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec("DELETE FROM rooms WHERE roomID=?", id)
+	if err != nil {
+		return err
+	}
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
