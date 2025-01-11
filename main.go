@@ -50,6 +50,15 @@ type LogRow struct {
 	IncidentTime mysql.NullTime `json:incidentTime`
 	Daily        bool           `json:daily`
 }
+type Log struct {
+	LogID        int            `json:logID`
+	StockID      int            `json:stockID`
+	ItemName     string         `json:itemName`
+	Differance   float64        `json:differance`
+	TotalAfter   float64        `json:totalAfter`
+	IncidentTime mysql.NullTime `json:incidentTime`
+	Daily        bool           `json:daily`
+}
 type FullStock struct {
 	StockID       int            `json:stockID`
 	ItemName      string         `json:itemName`
@@ -171,15 +180,36 @@ func root(w http.ResponseWriter, r *http.Request) {
 }
 func logs(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
+	case http.MethodOptions:
+		fmt.Println("Endpoint Hit: logs OPTIONS")
+		w.WriteHeader(http.StatusOK)
+
 	case http.MethodGet:
-		var res []LogRow
+		var res []Log
 		var err error
 		fmt.Println("Endpoint Hit: logs GET")
-		res, err = getLogs()
+		res, err = getLogNames()
 		if err != nil {
 			log.Fatal(err)
 		}
+
 		json.NewEncoder(w).Encode(res)
+
+	case http.MethodDelete:
+		fmt.Println("Endpoint Hit: logs DELETE")
+
+		id := strings.TrimPrefix(r.URL.Path, "/logs/")
+		idnum, err := strconv.Atoi(id)
+		if err != nil {
+			log.Fatal(err)
+		}
+		err = deleteLog(idnum)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("data deleated sucesfuly"))
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -619,6 +649,39 @@ func getLogs() (res []LogRow, err error) {
 	}
 	return res, nil
 }
+func getLogNames() (res []Log, err error) {
+
+	rows, err := db.Query(`SELECT 
+    logs.logID,
+    logs.stockID,
+    stock.itemName, 
+    logs.differance,
+    logs.totalAfter,
+    logs.incidentTime,
+    logs.daily
+	FROM 
+		logs
+	LEFT JOIN 
+		stock
+	ON 
+		logs.stockID = stock.stockID;
+	`)
+	if err != nil {
+		return res, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var data Log
+		err = rows.Scan(&data.LogID, &data.StockID, &data.ItemName, &data.Differance, &data.TotalAfter, &data.IncidentTime, &data.Daily)
+		if err != nil {
+			return res, err
+		}
+		res = append(res, data)
+	}
+
+	return res, nil
+}
 func getFullStockById(id int) (res []FullStock, err error) {
 	row, err := db.Query(`
 		SELECT
@@ -834,4 +897,39 @@ func deleteRoom(id int) (err error) {
 	}
 
 	return nil
+}
+func deleteLog(id int) (err error) {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var log LogRow
+	err = tx.QueryRow("SELECT * FROM logs WHERE logID=?;", id).Scan(&log.LogID, &log.StockID, &log.Differance, &log.TotalAfter, &log.IncidentTime, &log.Daily)
+	if err != nil {
+		return err
+	}
+	var level float64
+	err = tx.QueryRow("SELECT level FROM stock WHERE stockID=?", log.StockID).Scan(&level)
+	if err != nil {
+		return err
+	}
+	level = level - log.Differance
+
+	_, err = tx.Exec("UPDATE stock SET level=? WHERE stockID=?", level, log.StockID)
+	if err != nil {
+		return nil
+	}
+
+	_, err = tx.Exec("DELETE FROM logs WHERE logID=?", id)
+	if err != nil {
+		return err
+	}
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+
+	return nil
+
 }
